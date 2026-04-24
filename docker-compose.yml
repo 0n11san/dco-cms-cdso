@@ -1,0 +1,72 @@
+version: '3.9'
+
+# Local development stack — uses Docker Hub images (untrusted per DoD hardening guide).
+# The cDSO pipeline Dockerfiles default to Iron Bank (registry1.dso.mil) base images.
+# The build args below override to Docker Hub for local testing ONLY.
+
+services:
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: dco-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       dco_cms
+      POSTGRES_USER:     dco
+      POSTGRES_PASSWORD: dco_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dco -d dco_cms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        NODE_IMAGE: node:20-alpine
+    container_name: dco-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV:        development
+      PORT:            3000
+      DB_HOST:         postgres
+      DB_PORT:         5432
+      DB_NAME:         dco_cms
+      DB_USER:         dco
+      DB_PASSWORD:     dco_dev_password
+      SESSION_SECRET:  local-dev-secret-change-in-prod
+      ALLOWED_ORIGINS: http://localhost,http://localhost:80
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        NGINX_IMAGE: nginx:1.25-alpine
+    container_name: dco-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

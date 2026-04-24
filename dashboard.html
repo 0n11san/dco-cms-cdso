@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DCO CMS — Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/vendor/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <div class="classification-banner">UNCLASSIFIED // FOR OFFICIAL USE ONLY</div>
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner-lg"></div>
+    <span>Loading...</span>
+  </div>
+
+  <nav class="navbar">
+    <a href="landing.html" class="navbar-brand" style="text-decoration:none;color:var(--gold)"><span class="star">&#9733;</span> DCO CMS</a>
+    <div class="navbar-right">
+      <a href="dashboard.html" class="btn btn-outline btn-sm btn-nav-active">CONTRACT DASHBOARD</a>
+      <a href="renewal.html" class="btn btn-outline btn-sm">RENEWAL TRACKER</a>
+      <a href="priorities.html" class="btn btn-outline btn-sm">ARCYBER PRIORITIES</a>
+      <a href="budget.html" class="btn btn-outline btn-sm">BUDGET OVERVIEW</a>
+      <a href="audit-log.html" class="btn btn-outline btn-sm su-only">ACTIVITY LOG</a>
+      <a href="email-demo.html" class="btn btn-outline btn-sm su-only">EMAIL DEMO</a>
+      <span id="navUsername" class="text-muted" style="font-size:12px"></span>
+      <span id="navRoleBadge" class="user-badge"></span>
+      <button id="logoutBtn" class="btn btn-outline btn-sm">LOGOUT</button>
+    </div>
+    <button class="hamburger-btn" id="hamburgerBtn" aria-label="Menu">&#9776;</button>
+  </nav>
+  <div class="mobile-nav-dropdown" id="mobileNav">
+    <div class="mobile-user-info"><span id="mobileNavUsername"></span> &nbsp;<span id="mobileNavRole" class="user-badge"></span></div>
+    <a href="dashboard.html">CONTRACT DASHBOARD</a>
+    <a href="renewal.html">RENEWAL TRACKER</a>
+    <a href="priorities.html">ARCYBER PRIORITIES</a>
+    <a href="budget.html">BUDGET OVERVIEW</a>
+    <a href="audit-log.html" class="su-only">ACTIVITY LOG</a>
+    <a href="email-demo.html" class="su-only">EMAIL DEMO</a>
+    <button id="mobileLogoutBtn">LOGOUT</button>
+  </div>
+
+  <main class="main-content">
+    <div class="alert" id="pageAlert"></div>
+
+    <div class="page-header">
+      <div class="page-title">Active Contracts &nbsp;<span id="contractCount" class="text-muted" style="font-size:11px;font-weight:400;letter-spacing:0"></span></div>
+      <div class="controls-bar">
+        <label class="btn btn-outline btn-sm su-only" style="cursor:pointer" title="Upload Excel file to bulk-update contracts">
+          UPLOAD XLSX
+          <input type="file" id="uploadInput" accept=".xlsx,.xls" style="display:none">
+        </label>
+        <button class="btn btn-primary btn-sm su-only" id="btnAddContract">+ ADD CONTRACT</button>
+        <button class="btn btn-outline btn-sm" id="btnExportExcel">EXPORT EXCEL</button>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table id="contractTable">
+        <thead>
+          <tr>
+            <th style="width:32px">#</th>
+            <th data-tooltip="Name of the delivery order or primary software/vendor">Delivery Order Name</th>
+            <th data-tooltip="Official delivery order number assigned by the contracting office">DO #</th>
+            <th class="su-only" data-tooltip="Primary vendor point(s) of contact">Vendor POC(s)</th>
+            <th class="su-only" data-tooltip="Vendor POC email address">Email</th>
+            <th class="su-only" data-tooltip="Vendor POC phone number">Phone</th>
+            <th class="su-only text-right" data-tooltip="Budget Activity 8 funded portion of this contract">BA8 Portion</th>
+            <th class="su-only text-right" data-tooltip="ARCYBER-funded portion of this contract">ARCYBER Portion</th>
+            <th class="su-only text-right" data-tooltip="1% administrative fee applied via the ITEMS contracting vehicle">ITEMS Fee (1%)</th>
+            <th class="su-only text-right" data-tooltip="2% GSA Schedule fee applied to the contract base cost">GSA Fee (2%)</th>
+            <th class="su-only text-right" data-tooltip="Total obligated cost inclusive of all fees and line items">Total Current Cost</th>
+            <th class="su-only text-right" data-tooltip="Estimated total cost for the upcoming fiscal year">Projected Next FY</th>
+            <th data-tooltip="Program(s) of Record this contract directly supports">POR(s) Supported</th>
+            <th data-tooltip="Program of Record providing the funding for this contract">POR Funded By</th>
+            <th data-tooltip="Contracting vehicle used to execute this delivery order (CHESS ITES-4H for hardware, CHESS ITES SW for software)">Vehicle</th>
+            <th data-tooltip="Organization facilitating the contracting action (typically ITEMSS GSA)">Facilitated By</th>
+            <th data-tooltip="Indicates whether this contract will sunset (end) at PoP expiration or be renewed. N/A if not applicable.">Sunsetting?</th>
+            <th data-tooltip="Primary performance metric for this delivery order (e.g., number of endpoints, seats, or cores licensed)">Primary Metric</th>
+            <th data-tooltip="Period of Performance begin date">PoP Begin</th>
+            <th data-tooltip="Period of Performance end date">PoP End</th>
+            <th data-tooltip="Renewal urgency status based on suspense deadline (45 days before PoP end)">Status</th>
+            <th data-tooltip="Noteworthy items — vendor issues, new developments, leadership action items">Notes</th>
+            <th class="su-only" style="width:50px"></th>
+          </tr>
+        </thead>
+        <tbody id="contractTbody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div class="page-footer">UNCLASSIFIED // FOR OFFICIAL USE ONLY &nbsp;|&nbsp; DCO Contract Management System &nbsp;|&nbsp; ARCYBER</div>
+  <div class="classification-banner">UNCLASSIFIED // FOR OFFICIAL USE ONLY</div>
+
+  <!-- DETAIL MODAL -->
+  <div class="modal-overlay" id="detailOverlay">
+    <div class="modal" style="max-width:820px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="detailTitle"></div>
+          <div class="modal-subtitle" id="detailSubtitle"></div>
+        </div>
+        <button class="modal-close" onclick="DETAIL.close()">&#10005;</button>
+      </div>
+      <div class="modal-body" style="max-height:75vh;overflow-y:auto">
+
+        <div class="modal-section" id="detailVendorSection">
+          <div class="modal-section-title">Vendor Information</div>
+          <div id="detailVendorBody"></div>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-section-title">Contract Details</div>
+          <div id="detailInfoBody"></div>
+        </div>
+
+        <div class="modal-section" id="detailCapSection">
+          <div class="modal-section-title">Capability Description</div>
+          <div id="detailCapBody" style="font-size:13px;line-height:1.6;color:var(--text)"></div>
+        </div>
+
+        <div class="modal-section" id="detailCostSection">
+          <div class="modal-section-title">Cost Breakdown &amp; Summary
+            <span style="font-size:10px;font-weight:400;margin-left:8px;color:var(--text-muted)">Click &#9733; to set primary metric</span>
+          </div>
+          <div id="detailCostBody"></div>
+        </div>
+
+        <div class="modal-section" id="detailDocsSection">
+          <div class="modal-section-title">Contract Documents</div>
+          <div id="detailDocsBody"></div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="DETAIL.close()">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT / ADD MODAL -->
+  <div class="modal-overlay" id="editOverlay">
+    <div class="modal" style="max-width:860px">
+      <div class="modal-header">
+        <div class="modal-title" id="editModalTitle">Edit Contract</div>
+        <button class="modal-close" onclick="EDIT.close()">&#10005;</button>
+      </div>
+      <div class="modal-body" style="max-height:78vh;overflow-y:auto">
+        <div class="alert" id="editAlert"></div>
+        <form id="editForm" onsubmit="return false">
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editName">Delivery Order Name *</label>
+              <input class="form-control" type="text" id="editName" name="editName" placeholder="e.g. CrowdStrike Falcon" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editDONum">DO Number</label>
+              <input class="form-control" type="text" id="editDONum" name="editDONum" placeholder="W31P4Q-25-F-0101">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editVehicle">Contracting Vehicle</label>
+              <select class="form-control" id="editVehicle" name="editVehicle">
+                <option value="">— Select —</option>
+                <option value="CHESS ITES SW">CHESS ITES SW (Software)</option>
+                <option value="CHESS ITES-4H">CHESS ITES-4H (Hardware)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editFacilitatedBy">Facilitated By</label>
+              <input class="form-control" type="text" id="editFacilitatedBy" name="editFacilitatedBy" value="ITEMSS GSA">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editSunsetting">Sunsetting?</label>
+              <input class="form-control" type="text" id="editSunsetting" name="editSunsetting" placeholder="N/A or YYYY-MM-DD">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editCapDesc">Capability Description</label>
+            <textarea class="form-control" id="editCapDesc" name="editCapDesc" placeholder="Describe what this solution does for DCO operations..." style="min-height:70px"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Vendor POC(s)</label>
+            <div id="pocContainer"></div>
+            <button type="button" class="btn btn-outline btn-sm mt-8" onclick="EDIT.addPOC()">+ Add POC</button>
+          </div>
+
+          <div class="modal-section-title" style="margin-bottom:10px">Cost Information</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editBA8">BA8 Portion ($)</label>
+              <input class="form-control" type="number" id="editBA8" name="editBA8" value="0" min="0"
+                oninput="EDIT._updateFeeDisplay(parseFloat(this.value)||0, parseFloat(document.getElementById('editARCYBER').value)||0)">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editARCYBER">ARCYBER Portion ($)</label>
+              <input class="form-control" type="number" id="editARCYBER" name="editARCYBER" value="0" min="0"
+                oninput="EDIT._updateFeeDisplay(parseFloat(document.getElementById('editBA8').value)||0, parseFloat(this.value)||0)">
+            </div>
+          </div>
+          <div style="background:#0a0e0a;border:1px solid var(--border);padding:10px;font-size:12px;margin-bottom:14px">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
+              <div><div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em">ITEMS Fee (1%)</div><div id="calcItemsFee" class="fw-bold">$0</div></div>
+              <div><div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em">GSA Fee (2%)</div><div id="calcGsaFee" class="fw-bold">$0</div></div>
+              <div><div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:.07em">Total Current Cost</div><div id="calcTotal" class="text-gold fw-bold">$0</div></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editProjected">Projected Next FY ($)</label>
+            <input class="form-control" type="number" id="editProjected" name="editProjected" value="0" min="0" style="max-width:220px">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">POR(s) Supported</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" class="por-sup-checkbox" value="GDP"> GDP</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-sup-checkbox" value="DDS"> DDS</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-sup-checkbox" value="F&MA"> F&amp;MA</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-sup-checkbox" value="Tools"> Tools</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-sup-checkbox" value="Miscellaneous"> Misc</label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">POR Funded By</label>
+              <div class="checkbox-group">
+                <label class="checkbox-label"><input type="checkbox" class="por-fund-checkbox" value="GDP"> GDP</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-fund-checkbox" value="DDS"> DDS</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-fund-checkbox" value="F&MA"> F&amp;MA</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-fund-checkbox" value="Tools"> Tools</label>
+                <label class="checkbox-label"><input type="checkbox" class="por-fund-checkbox" value="Miscellaneous"> Misc</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editPopBegin">PoP Begin Date</label>
+              <input class="form-control" type="date" id="editPopBegin" name="editPopBegin">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editPopEnd">PoP End Date</label>
+              <input class="form-control" type="date" id="editPopEnd" name="editPopEnd">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Line Items &amp; Metrics</label>
+            <table class="line-items-table" style="width:100%">
+              <thead><tr>
+                <th>SKU Description</th>
+                <th style="width:70px">Qty</th>
+                <th style="width:110px">Unit Cost ($)</th>
+                <th style="width:110px">Total ($)</th>
+                <th style="width:130px">Metric Type</th>
+                <th style="width:80px">Metric Qty</th>
+                <th style="width:36px"></th>
+              </tr></thead>
+              <tbody id="lineItemsTbody"></tbody>
+            </table>
+            <button type="button" class="btn btn-outline btn-sm mt-8" onclick="EDIT.addLineItem()">+ Add Line Item</button>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Requirement Validators <span class="text-muted" style="font-weight:400;text-transform:none;letter-spacing:0">(will receive automated renewal email notifications)</span></label>
+            <div id="validatorContainer"></div>
+            <button type="button" class="btn btn-outline btn-sm mt-8" onclick="EDIT.addValidator()">+ Add Validator</button>
+          </div>
+
+          <div class="modal-section-title" style="margin-bottom:10px">Contract Documents</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="editDD250">DD-250 URL</label>
+              <input class="form-control" type="url" id="editDD250" name="editDD250" placeholder="https://...">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="editRIP">RIP URL</label>
+              <input class="form-control" type="url" id="editRIP" name="editRIP" placeholder="https://...">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editDocOther">Other Document URLs (one per line)</label>
+            <textarea class="form-control" id="editDocOther" placeholder="https://&#10;https://"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editNotes">Notes</label>
+            <textarea class="form-control" id="editNotes" name="editNotes" placeholder="Noteworthy items only — new developments, vendor issues, leadership action items. Leave blank if nothing actionable."></textarea>
+          </div>
+
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="EDIT.close()">CANCEL</button>
+        <button class="btn btn-gold" onclick="EDIT.save()">SAVE CONTRACT</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/tooltip.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script>document.addEventListener('DOMContentLoaded', function() { DASHBOARD.init(); });</script>
+  <script>
+    (function() {
+      var btn = document.getElementById('hamburgerBtn');
+      var nav = document.getElementById('mobileNav');
+      if (btn && nav) btn.addEventListener('click', function() { nav.classList.toggle('open'); });
+      var mobileLogout = document.getElementById('mobileLogoutBtn');
+      if (mobileLogout) mobileLogout.addEventListener('click', function() { AUTH.logout(); });
+      // Populate mobile user badge from session
+      var session = AUTH.getSession();
+      if (session) {
+        var mu = document.getElementById('mobileNavUsername');
+        var mr = document.getElementById('mobileNavRole');
+        if (mu) mu.textContent = session.username;
+        if (mr) mr.textContent = session.role === 'superuser' ? 'Superuser' : 'User';
+      }
+    })();
+  </script>
+</body>
+</html>

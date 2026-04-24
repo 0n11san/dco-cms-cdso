@@ -1,0 +1,174 @@
+# DCO CMS — cDSO Pipeline
+# Stages match the cDSO/ArCTIC required pipeline order:
+# Pre-test → Pre-build → Build → Post-test → Review → Clean → Deliver
+
+stages:
+  - pre-test
+  - pre-build
+  - build
+  - post-test
+  - review
+  - clean
+  - deliver
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_BACKEND:  "$CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHORT_SHA"
+  IMAGE_FRONTEND: "$CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHORT_SHA"
+  IMAGE_BACKEND_LATEST:  "$CI_REGISTRY_IMAGE/backend:latest"
+  IMAGE_FRONTEND_LATEST: "$CI_REGISTRY_IMAGE/frontend:latest"
+
+# ── PRE-TEST ──────────────────────────────────────────────────────────────────
+lint:
+  stage: pre-test
+  image: node:20-alpine
+  script:
+    - cd backend && npm install
+    - npx eslint src/ --ext .js --max-warnings 0 || true
+  allow_failure: true
+
+secret-scan:
+  stage: pre-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/trufflehog:latest
+  script:
+    - trufflehog filesystem . --fail --no-update
+  allow_failure: false
+
+dockerfile-lint:
+  stage: pre-test
+  image: hadolint/hadolint:latest-alpine
+  script:
+    - hadolint Dockerfile.backend
+    - hadolint Dockerfile.frontend
+
+# ── PRE-BUILD ─────────────────────────────────────────────────────────────────
+dependency-check:
+  stage: pre-build
+  image: node:20-alpine
+  script:
+    - cd backend && npm install
+    - npm audit --audit-level=high
+  allow_failure: true
+
+validate-k8s:
+  stage: pre-build
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl apply --dry-run=client -f k8s/
+  allow_failure: true
+
+# ── BUILD ─────────────────────────────────────────────────────────────────────
+build-backend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -f Dockerfile.backend -t "$IMAGE_BACKEND" -t "$IMAGE_BACKEND_LATEST" .
+    - docker push "$IMAGE_BACKEND"
+    - docker push "$IMAGE_BACKEND_LATEST"
+
+build-frontend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -f Dockerfile.frontend -t "$IMAGE_FRONTEND" -t "$IMAGE_FRONTEND_LATEST" .
+    - docker push "$IMAGE_FRONTEND"
+    - docker push "$IMAGE_FRONTEND_LATEST"
+
+# ── POST-TEST ─────────────────────────────────────────────────────────────────
+container-scan-backend:
+  stage: post-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/trivy:latest
+  script:
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$IMAGE_BACKEND"
+  allow_failure: false
+
+container-scan-frontend:
+  stage: post-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/trivy:latest
+  script:
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$IMAGE_FRONTEND"
+  allow_failure: false
+
+sbom-backend:
+  stage: post-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/syft:latest
+  script:
+    - syft "$IMAGE_BACKEND" -o spdx-json > sbom-backend.spdx.json
+  artifacts:
+    paths:
+      - sbom-backend.spdx.json
+    expire_in: 90 days
+
+sbom-frontend:
+  stage: post-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/syft:latest
+  script:
+    - syft "$IMAGE_FRONTEND" -o spdx-json > sbom-frontend.spdx.json
+  artifacts:
+    paths:
+      - sbom-frontend.spdx.json
+    expire_in: 90 days
+
+sast:
+  stage: post-test
+  image: registry.il2.dso.mil/platform-one/big-bang/apps/developer-tools/semgrep:latest
+  script:
+    - semgrep --config=auto backend/src/ --error
+  allow_failure: true
+
+# ── REVIEW ────────────────────────────────────────────────────────────────────
+# Manual gate — AO/ISSO must approve before delivery
+manual-approval:
+  stage: review
+  script:
+    - echo "Awaiting manual approval from AO/ISSO before deployment."
+  when: manual
+  allow_failure: false
+
+# ── CLEAN ─────────────────────────────────────────────────────────────────────
+remove-intermediate-images:
+  stage: clean
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker image prune -f
+  allow_failure: true
+
+# ── DELIVER ───────────────────────────────────────────────────────────────────
+deploy-to-gn:
+  stage: deliver
+  image: bitnami/kubectl:latest
+  environment:
+    name: gabriel-nimbus-preprod
+    url: https://$GN_APP_HOSTNAME
+  only:
+    - main
+  before_script:
+    - mkdir -p ~/.kube
+    - echo "$GN_KUBECONFIG" | base64 -d > ~/.kube/config
+  script:
+    # Substitute image tags in manifests and apply
+    - sed -i "s|IMAGE_BACKEND_TAG|$IMAGE_BACKEND|g"   k8s/deployment-backend.yaml
+    - sed -i "s|IMAGE_FRONTEND_TAG|$IMAGE_FRONTEND|g" k8s/deployment-frontend.yaml
+    - kubectl apply -f k8s/namespace.yaml
+    - kubectl apply -f k8s/configmap.yaml
+    - kubectl apply -f k8s/secret.yaml
+    - kubectl apply -f k8s/deployment-backend.yaml
+    - kubectl apply -f k8s/deployment-frontend.yaml
+    - kubectl apply -f k8s/service-backend.yaml
+    - kubectl apply -f k8s/service-frontend.yaml
+    - kubectl apply -f k8s/ingress.yaml
+    - kubectl rollout status deployment/dco-backend  -n dco-cms --timeout=120s
+    - kubectl rollout status deployment/dco-frontend -n dco-cms --timeout=120s

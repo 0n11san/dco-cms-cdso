@@ -1,0 +1,32 @@
+# Iron Bank is the DoD trusted base image source (registry1.dso.mil).
+# LOCAL TESTING: override with Docker Hub via --build-arg (see docker-compose.yml)
+# CDSO PIPELINE:  leave ARGs at default — Iron Bank images are used automatically
+
+ARG NODE_IMAGE=registry1.dso.mil/ironbank/opensource/nodejs/nodejs:20
+
+# Stage 1 — install dependencies
+FROM ${NODE_IMAGE} AS deps
+WORKDIR /app
+COPY backend/package.json ./
+RUN npm install --omit=dev
+
+# Stage 2 — runtime image
+FROM ${NODE_IMAGE} AS runtime
+WORKDIR /app
+
+# Non-root user for security (STIG V-261298)
+RUN addgroup -S dco && adduser -S dco -G dco
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY backend/src ./src
+COPY backend/migrations ./migrations
+
+RUN chown -R dco:dco /app
+USER dco
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+
+CMD ["node", "src/server.js"]

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dco-cms-config
+  namespace: dco-cms
+data:
+  NODE_ENV:        "production"
+  PORT:            "3000"
+  DB_HOST:         "dco-postgres-svc"
+  DB_PORT:         "5432"
+  DB_NAME:         "dco_cms"
+  DB_USER:         "dco"
+  ALLOWED_ORIGINS: "https://dco-cms.apps.gabriel-nimbus.mil"
