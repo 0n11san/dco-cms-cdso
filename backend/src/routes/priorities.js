@@ -4,13 +4,16 @@ const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/priorities — returns contract IDs in priority order
+// GET /api/priorities — returns contracts as ranked objects for the priorities UI
 router.get('/', requireAuth, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id FROM contracts ORDER BY priority_order ASC, created_at ASC'
+      `SELECT id, delivery_order_name AS name, delivery_order_number AS "doNumber",
+              priority_order AS rank
+       FROM contracts
+       ORDER BY priority_order ASC, created_at ASC`
     );
-    res.json({ orderedIds: result.rows.map(r => r.id) });
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to load priorities.' });

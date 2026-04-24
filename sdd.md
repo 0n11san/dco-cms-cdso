@@ -125,7 +125,10 @@ Tables:
 
 ### 5.1 Authentication Flow
 
+> **Pre-production only:** The flow below uses username/password authentication for development and pipeline testing. Prior to production deployment on Gabriel Nimbus, this must be replaced with CAC/PIV authentication via the GN Keycloak instance (OIDC/JWT). User identity and role assignment will move to Keycloak groups backed by Army Active Directory. No code changes to the frontend are required; only the backend auth middleware changes.
+
 ```
+[PRE-PROD — username/password]
 1. User submits username/password via login form
 2. Browser POSTs to /api/auth/login
 3. Backend queries users table, compares password with bcrypt hash
@@ -133,6 +136,13 @@ Tables:
 5. Browser stores username/role in sessionStorage (display cache only)
 6. All subsequent API calls include the session cookie automatically
 7. Sessions expire after 8 hours of inactivity
+
+[PRODUCTION — CAC/PIV via Keycloak]
+1. User inserts CAC → redirected to GN Keycloak login
+2. Keycloak authenticates against Army Active Directory
+3. Keycloak issues signed JWT with role claims (e.g. dco-cms-superuser)
+4. Backend validates JWT on every request via OIDC middleware
+5. Role read from token claims — no local user database required
 ```
 
 ### 5.2 Contract Data Flow
@@ -270,8 +280,10 @@ The application is built and deployed via the cDSO CI/CD pipeline with the follo
 
 | Gap | Risk | Remediation |
 |---|---|---|
+| Username/password auth (pre-prod only) | High — not compliant with DoD CAC/PIV requirement for production | Integrate with GN Keycloak instance via OIDC before go-live; replace login endpoint with JWT validation middleware; assign roles via Keycloak groups tied to AD |
+| User management in local database | High — identity should live in AD/Keycloak, not app DB | Remove `users` table and local credential management upon Keycloak integration; role claims read from JWT |
 | PostgreSQL single replica | Medium — no HA for DB | Acceptable for pre-prod; production should use a managed PG instance or operator |
-| No rate limiting on login endpoint | Low | Add `express-rate-limit` middleware before production |
+| No rate limiting on login endpoint | Low — mitigated by Keycloak in production | Add `express-rate-limit` middleware; resolved automatically upon Keycloak integration |
 | Session secret rotation not automated | Low | Document manual rotation procedure in runbook |
 
 ---
